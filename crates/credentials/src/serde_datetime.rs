@@ -66,3 +66,62 @@ pub mod option {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde::{Deserialize, Serialize};
+    use time::OffsetDateTime;
+
+    #[derive(Serialize, Deserialize, Debug, PartialEq)]
+    struct Wrapper {
+        #[serde(default, with = "crate::serde_datetime::option")]
+        expiry: Option<OffsetDateTime>,
+    }
+
+    #[test]
+    fn test_serialize_none() {
+        let w = Wrapper { expiry: None };
+        let json = serde_json::to_string(&w).unwrap();
+        assert_eq!(json, r#"{"expiry":null}"#);
+    }
+
+    #[test]
+    fn test_serialize_some_roundtrip_rfc3339() {
+        let dt = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+        let w = Wrapper { expiry: Some(dt) };
+        let json = serde_json::to_string(&w).unwrap();
+        let back: Wrapper = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.expiry, Some(dt));
+    }
+
+    #[test]
+    fn test_deserialize_null() {
+        let json = r#"{"expiry":null}"#;
+        let w: Wrapper = serde_json::from_str(json).unwrap();
+        assert!(w.expiry.is_none());
+    }
+
+    #[test]
+    fn test_deserialize_rfc3339() {
+        let json = r#"{"expiry":"2025-01-01T00:00:00Z"}"#;
+        let w: Wrapper = serde_json::from_str(json).unwrap();
+        assert!(w.expiry.is_some());
+        let dt = w.expiry.unwrap();
+        assert_eq!(dt.year(), 2025);
+        assert_eq!(dt.month(), time::Month::January);
+        assert_eq!(dt.day(), 1);
+    }
+
+    #[test]
+    fn test_deserialize_legacy_format() {
+        let json = r#"{"expiry":"2025-03-07 12:30:00.000000000 +00:00:00"}"#;
+        let w: Wrapper = serde_json::from_str(json).unwrap();
+        assert!(w.expiry.is_some());
+        let dt = w.expiry.unwrap();
+        assert_eq!(dt.year(), 2025);
+        assert_eq!(dt.month(), time::Month::March);
+        assert_eq!(dt.day(), 7);
+        assert_eq!(dt.hour(), 12);
+        assert_eq!(dt.minute(), 30);
+    }
+}

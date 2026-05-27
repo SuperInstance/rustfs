@@ -60,3 +60,75 @@ impl From<CapacityScanResult> for CapacityScanSummary {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_capacity_disk_ref_equality() {
+        let a = CapacityDiskRef {
+            endpoint: "ep1".to_string(),
+            drive_path: "/drive1".to_string(),
+        };
+        let b = CapacityDiskRef {
+            endpoint: "ep1".to_string(),
+            drive_path: "/drive1".to_string(),
+        };
+        assert_eq!(a, b);
+
+        let c = CapacityDiskRef {
+            endpoint: "ep2".to_string(),
+            drive_path: "/drive1".to_string(),
+        };
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn test_capacity_scan_result_with_partial_errors() {
+        let result = CapacityScanResult {
+            used_bytes: 1024,
+            file_count: 10,
+            sampled_count: 0,
+            is_estimated: false,
+            scan_duration: Duration::from_millis(50),
+            had_partial_errors: false,
+        };
+        assert!(!result.had_partial_errors);
+
+        let modified = result.with_partial_errors();
+        assert!(modified.had_partial_errors);
+        assert_eq!(modified.used_bytes, 1024);
+        assert_eq!(modified.file_count, 10);
+    }
+
+    #[test]
+    fn test_capacity_scan_result_into_summary() {
+        let result = CapacityScanResult {
+            used_bytes: 2048,
+            file_count: 42,
+            sampled_count: 5,
+            is_estimated: true,
+            scan_duration: Duration::from_millis(100),
+            had_partial_errors: true,
+        };
+        let summary: CapacityScanSummary = result.into();
+        assert_eq!(summary.used_bytes, 2048);
+        assert_eq!(summary.file_count, 42);
+        assert_eq!(summary.sampled_count, 5);
+        assert!(summary.is_estimated);
+        assert!(summary.had_partial_errors);
+        assert_eq!(summary.scan_duration, Duration::from_millis(100));
+    }
+
+    #[test]
+    fn test_capacity_scan_result_default() {
+        let result = CapacityScanResult::default();
+        assert_eq!(result.used_bytes, 0);
+        assert_eq!(result.file_count, 0);
+        assert_eq!(result.sampled_count, 0);
+        assert!(!result.is_estimated);
+        assert_eq!(result.scan_duration, Duration::ZERO);
+        assert!(!result.had_partial_errors);
+    }
+}

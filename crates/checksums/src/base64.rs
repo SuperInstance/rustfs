@@ -42,3 +42,42 @@ pub(crate) fn encode(input: impl AsRef<[u8]>) -> String {
 pub(crate) fn encoded_length(length: usize) -> usize {
     STANDARD.encoded_length(length)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_encode_empty() {
+        assert_eq!(encode(b""), "");
+    }
+
+    #[test]
+    fn test_roundtrip() {
+        let data = b"hello, rustfs!";
+        let encoded = encode(data);
+        let decoded = decode(&encoded).unwrap();
+        assert_eq!(decoded, data);
+    }
+
+    #[test]
+    fn test_encode_known_value() {
+        // "Hello" -> "SGVsbG8="
+        let encoded = encode(b"Hello");
+        assert_eq!(encoded, "SGVsbG8=");
+    }
+
+    #[test]
+    fn test_decode_invalid_input() {
+        assert!(decode("!!!not-base64!!!").is_err());
+    }
+
+    #[test]
+    fn test_encoded_length_matches_actual() {
+        for len in [0, 1, 5, 16, 100] {
+            let data = vec![0xAB_u8; len];
+            let actual_len = encode(&data).len();
+            assert_eq!(encoded_length(len), actual_len, "mismatch for length {len}");
+        }
+    }
+}

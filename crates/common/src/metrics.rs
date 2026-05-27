@@ -747,3 +747,139 @@ impl Drop for CloseDiskGuard {
         // If there is no runtime we are in a test or shutdown path; skip cleanup.
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- IlmAction tests ----
+
+    #[test]
+    fn test_ilm_action_as_str() {
+        assert_eq!(IlmAction::NoneAction.as_str(), "none");
+        assert_eq!(IlmAction::DeleteAction.as_str(), "delete");
+        assert_eq!(IlmAction::TransitionAction.as_str(), "transition");
+        assert_eq!(IlmAction::ActionCount.as_str(), "action_count");
+    }
+
+    #[test]
+    fn test_ilm_action_from_index_roundtrip() {
+        for i in 0..10 {
+            let action = IlmAction::from_index(i);
+            assert!(action.is_some(), "index {i} should be valid");
+            let a = action.unwrap();
+            assert_eq!(a as usize, i);
+        }
+        assert!(IlmAction::from_index(10).is_none());
+    }
+
+    #[test]
+    fn test_ilm_action_delete_predicates() {
+        assert!(IlmAction::DeleteAction.delete());
+        assert!(IlmAction::DeleteVersionAction.delete());
+        assert!(IlmAction::DeleteAllVersionsAction.delete());
+        assert!(IlmAction::DelMarkerDeleteAllVersionsAction.delete());
+        assert!(IlmAction::DeleteRestoredAction.delete());
+        assert!(IlmAction::DeleteRestoredVersionAction.delete());
+        assert!(!IlmAction::NoneAction.delete());
+        assert!(!IlmAction::TransitionAction.delete());
+    }
+
+    #[test]
+    fn test_ilm_action_delete_restored() {
+        assert!(IlmAction::DeleteRestoredAction.delete_restored());
+        assert!(IlmAction::DeleteRestoredVersionAction.delete_restored());
+        assert!(!IlmAction::DeleteAction.delete_restored());
+    }
+
+    #[test]
+    fn test_ilm_action_delete_versioned() {
+        assert!(IlmAction::DeleteVersionAction.delete_versioned());
+        assert!(IlmAction::DeleteRestoredVersionAction.delete_versioned());
+        assert!(!IlmAction::DeleteAction.delete_versioned());
+    }
+
+    #[test]
+    fn test_ilm_action_delete_all() {
+        assert!(IlmAction::DeleteAllVersionsAction.delete_all());
+        assert!(IlmAction::DelMarkerDeleteAllVersionsAction.delete_all());
+        assert!(!IlmAction::DeleteAction.delete_all());
+    }
+
+    // ---- Metric tests ----
+
+    #[test]
+    fn test_metric_as_str_values() {
+        assert_eq!(Metric::ReadMetadata.as_str(), "read_metadata");
+        assert_eq!(Metric::ScanObject.as_str(), "scan_object");
+        assert_eq!(Metric::Last.as_str(), "last");
+    }
+
+    #[test]
+    fn test_metric_from_index_roundtrip() {
+        for i in 0..(Metric::Last as usize) {
+            let m = Metric::from_index(i);
+            assert!(m.is_some(), "index {i} should be valid");
+            assert_eq!(m.unwrap() as usize, i);
+        }
+        assert!(Metric::from_index(Metric::Last as usize).is_none());
+        assert!(Metric::from_index(999).is_none());
+    }
+
+    // ---- Metrics struct tests ----
+
+    #[test]
+    fn test_metrics_lifetime_initial_zero() {
+        let m = Metrics::new();
+        assert_eq!(m.lifetime(Metric::ReadMetadata), 0);
+        assert_eq!(m.lifetime(Metric::ScanObject), 0);
+    }
+
+    #[test]
+    fn test_metrics_lifetime_out_of_range_returns_zero() {
+        let m = Metrics::new();
+        // Last is the boundary sentinel; indexing at or beyond it should return 0.
+        assert_eq!(m.lifetime(Metric::Last), 0);
+    }
+
+    #[test]
+    fn test_metrics_inc_time_increments_counter() {
+        Metrics::inc_time(Metric::Ilm, Duration::from_millis(50));
+        assert_eq!(global_metrics().lifetime(Metric::Ilm), 1);
+        Metrics::inc_time(Metric::Ilm, Duration::from_millis(30));
+        assert_eq!(global_metrics().lifetime(Metric::Ilm), 2);
+    }
+
+    #[tokio::test]
+    async fn test_metrics_cycle_get_set() {
+        let m = Metrics::new();
+        assert!(m.get_cycle().await.is_none());
+
+        let cycle = CurrentCycle {
+            current: 42,
+            next: 43,
+            cycle_completed: vec![],
+            started: Utc::now(),
+        };
+        m.set_cycle(Some(cycle.clone())).await;
+        let retrieved = m.get_cycle().await.unwrap();
+        assert_eq!(retrieved.current, 42);
+        assert_eq!(retrieved.next, 43);
+    }
+
+    #[test]
+    fn test_current_cycle_marshal_unmarshal_roundtrip() {
+        let cycle = CurrentCycle {
+            current: 10,
+            next: 11,
+            cycle_completed: vec![Utc::now()],
+            started: Utc::now(),
+        };
+        let buf = cycle.marshal().unwrap();
+        let mut restored = CurrentCycle::default();
+        restored.unmarshal(&buf).unwrap();
+        assert_eq!(restored.current, 10);
+        assert_eq!(restored.next, 11);
+        assert_eq!(restored.cycle_completed.len(), 1);
+    }
+}

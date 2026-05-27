@@ -338,6 +338,7 @@ mod tests {
 
     use crate::ChecksumAlgorithm;
     use crate::http::HttpChecksum;
+    use crate::{CRC_32_NAME, CRC_32_C_NAME, SHA_1_NAME, SHA_256_NAME, CRC_64_NVME_NAME};
 
     use crate::base64;
     use http::HeaderValue;
@@ -442,5 +443,34 @@ mod tests {
             .parse::<ChecksumAlgorithm>()
             .expect_err("it should error");
         assert_eq!("some invalid checksum algorithm", error.checksum_algorithm());
+    }
+
+    #[test]
+    fn test_checksum_algorithm_from_str_all_variants() {
+        // Case-insensitive parsing
+        assert_eq!("crc32".parse::<ChecksumAlgorithm>().unwrap(), ChecksumAlgorithm::Crc32);
+        assert_eq!("CRC32".parse::<ChecksumAlgorithm>().unwrap(), ChecksumAlgorithm::Crc32);
+        assert_eq!("crc32c".parse::<ChecksumAlgorithm>().unwrap(), ChecksumAlgorithm::Crc32c);
+        assert_eq!("CRC32C".parse::<ChecksumAlgorithm>().unwrap(), ChecksumAlgorithm::Crc32c);
+        assert_eq!("sha1".parse::<ChecksumAlgorithm>().unwrap(), ChecksumAlgorithm::Sha1);
+        assert_eq!("SHA1".parse::<ChecksumAlgorithm>().unwrap(), ChecksumAlgorithm::Sha1);
+        assert_eq!("sha256".parse::<ChecksumAlgorithm>().unwrap(), ChecksumAlgorithm::Sha256);
+        assert_eq!("SHA256".parse::<ChecksumAlgorithm>().unwrap(), ChecksumAlgorithm::Sha256);
+        assert_eq!("crc64nvme".parse::<ChecksumAlgorithm>().unwrap(), ChecksumAlgorithm::Crc64Nvme);
+        // MD5 is deprecated and maps to Crc32
+        assert_eq!("md5".parse::<ChecksumAlgorithm>().unwrap(), ChecksumAlgorithm::Crc32);
+    }
+
+    #[test]
+    fn test_checksum_algorithm_as_str_roundtrip() {
+        for name in [CRC_32_NAME, CRC_32_C_NAME, SHA_1_NAME, SHA_256_NAME, CRC_64_NVME_NAME] {
+            let algo: ChecksumAlgorithm = name.parse().unwrap();
+            assert_eq!(algo.as_str(), name);
+        }
+    }
+
+    #[test]
+    fn test_checksum_algorithm_default_is_crc32() {
+        assert_eq!(ChecksumAlgorithm::default(), ChecksumAlgorithm::Crc32);
     }
 }

@@ -142,3 +142,69 @@ pub struct MtlsIdentityPem {
     pub cert_pem: Vec<u8>,
     pub key_pem: Vec<u8>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_set_and_get_local_node_name() {
+        set_global_local_node_name("test-node-1").await;
+        assert_eq!(get_global_local_node_name().await, "test-node-1");
+    }
+
+    #[tokio::test]
+    async fn test_set_and_get_addr() {
+        set_global_addr("https://node1:9000").await;
+        let addr = GLOBAL_RUSTFS_ADDR.read().await.clone();
+        assert_eq!(addr, "https://node1:9000");
+    }
+
+    #[tokio::test]
+    async fn test_set_and_get_root_cert() {
+        set_global_root_cert(vec![1, 2, 3]).await;
+        let cert = GLOBAL_ROOT_CERT.read().await.clone();
+        assert_eq!(cert, Some(vec![1, 2, 3]));
+    }
+
+    #[tokio::test]
+    async fn test_mtls_identity() {
+        let identity = MtlsIdentityPem {
+            cert_pem: b"cert".to_vec(),
+            key_pem: b"key".to_vec(),
+        };
+        set_global_mtls_identity(Some(identity.clone())).await;
+        let stored = GLOBAL_MTLS_IDENTITY.read().await.clone();
+        assert!(stored.is_some());
+        let stored = stored.unwrap();
+        assert_eq!(stored.cert_pem, b"cert");
+        assert_eq!(stored.key_pem, b"key");
+
+        set_global_mtls_identity(None).await;
+        assert!(GLOBAL_MTLS_IDENTITY.read().await.is_none());
+    }
+
+    #[test]
+    fn test_outbound_tls_generation() {
+        set_global_outbound_tls_generation(42);
+        assert_eq!(get_global_outbound_tls_generation(), 42);
+        set_global_outbound_tls_generation(99);
+        assert_eq!(get_global_outbound_tls_generation(), 99);
+    }
+
+    #[tokio::test]
+    async fn test_connection_cache_evict_and_clear() {
+        // We can't easily insert a real Channel, but we can test evict/has_cached on empty cache.
+        assert!(!has_cached_connection("no-such-addr").await);
+        evict_connection("no-such-addr").await; // should not panic
+        clear_all_connections().await; // should not panic
+    }
+
+    #[tokio::test]
+    async fn test_set_and_get_init_time() {
+        assert!(get_global_init_time().await.is_none());
+        set_global_init_time_now().await;
+        let t = get_global_init_time().await;
+        assert!(t.is_some());
+    }
+}

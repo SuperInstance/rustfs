@@ -42,4 +42,32 @@ impl fmt::Display for UnknownChecksumAlgorithmError {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_display_contains_algorithm_name() {
+        let err = UnknownChecksumAlgorithmError::new("foobar");
+        let msg = format!("{err}");
+        assert!(msg.contains("foobar"), "message should mention the algorithm: {msg}");
+        assert!(
+            msg.contains("crc32") && msg.contains("sha256"),
+            "message should list known algorithms: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_checksum_algorithm_accessor() {
+        let err = UnknownChecksumAlgorithmError::new("unknown-algo");
+        assert_eq!(err.checksum_algorithm(), "unknown-algo");
+    }
+
+    #[test]
+    fn test_error_chain() {
+        let err: &dyn Error = &UnknownChecksumAlgorithmError::new("xyz");
+        assert!(err.source().is_none(), "no source expected");
+    }
+}
+
 impl Error for UnknownChecksumAlgorithmError {}
